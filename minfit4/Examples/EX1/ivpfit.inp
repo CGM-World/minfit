@@ -1,0 +1,10 @@
+C ---- input file for ivpfit program ------
+'/home/matrix/cwc/Data/Atomic/atoms.dat'	file with atomic data
+'zabs.dat'					file with redshift
+45000.  					resolution of spectrograph
+0.1						column density fractional adjustment
+0.1						Doppler par fractional adjustment
+12.						log10 inital column density for new comp
+5.						bpar in km/s for new comp
+1						plt_flag (1=yes, 0=no) ! quits after applying models
+1						con_flag (1=yes, 0=no)

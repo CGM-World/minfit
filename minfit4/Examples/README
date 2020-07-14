@@ -1,0 +1,7 @@
+these two example systems show two extremes of the fitting.
+
+EX1/ - an old standby favorite system that fits quickly and clearly
+EX2/ - this systems is a humdinger saturated system for which no sat
+       regions are defined; as the fit unfolds, it appears that the
+       model is going very bad, but minfit recovers and does a descent
+       job on this

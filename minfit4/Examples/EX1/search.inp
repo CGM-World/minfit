@@ -1,0 +1,13 @@
+C		===== this is the default input file at run time ====
+"./"					data directory (must be in quotes)
+""					spectrum
+""		     	        	file extension or delimeter of input data
+"/home/matrix/cwc/Data/Atomic/atoms.dat"	ionfile = the file containing transitions and atomic data
+MgII2796				flag_trans = the flag transition for doublet searching
+5.					N_sigma = the significance level for feature detection
+1.2					plt_scale = Y factor for window scaling
+51700.					R_isf = effective instrumental spread function R (FWHM)
+350.					velwin = the velocity window in km/s for system plotting
+4               			num_trans = the number of strongest ions for system plotting
+0.001            			chisqtol = chi square fractional tolerance for gaussian fitting
+100					maxiter = maximum iterations for a gaussian fit

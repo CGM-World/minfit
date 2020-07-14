@@ -1,0 +1,93 @@
+Last Modified: Spring 2011
+Author: Chris Churchill, New Mexico State University
+
+If we are not collaborating (co-authoring a paper), then if you
+publish any results from this code or present them at a talk, please
+provide an acknowledgement to me in paper reference
+
+The current best reference for MINFIT is
+Churchill, C. W. 1997, Ph.D Thesis, University of California, Santa
+Cruz
+
+
+TO INSTALL MINFIT
+
+A. Install supporting object libraries
+B. Build MINFIT
+C. Test MINFIT
+
+Minfit is currently ported to Linux.  Most subdirectories contain
+short README files that are helpful in navigating the installation.  I
+suggest you browse them.
+
+
+NOTES ON SUPPORTING OBJECT LIBRARIES
+
+There are three object libraries that must first be built to install
+MINFIT.
+
+- SLATEC        
+SLATEC is absolutely required.  This library contains the mother of
+all LSF codes. SLATEC was obtained from www.netlib.org.  However, only
+a portion of the overall package is required and has been included in
+this distribbution
+
+- LAPACK 
+LAPACK is absolutely required.  This library performs seriously heavy
+matrix inversions and decompositions that SLATEC requires. LAPACK was
+obtained from www.netlib.org
+
+The above two object library links are pointed to in the MINFIT
+Makefile (in the minfit/minfit4 subdirectory) using relative
+directories so that they should be immediately seeable by the Makefile
+
+- LICK MONGO
+Lick mongo is an old and unsupported plotting package, but it works!
+It is possible to install without the Lick Mongo.  However, you will
+not be able to view the convergance of the model.  If you have Lick
+Mongo installed, you will need to change the path link to the object
+library in the MINFIT Makefile (in the minfit/minfit4 subdirectory).
+To install Lick Mongo from the ground up, contact John Holtzman
+(holtz@nmsu.edu), who is the last supporter of the software (via the
+Lick VISTA package) on the planet.
+
+GitHub URL for LICK MONGO:
+https://github.com/holtzmanjon/xvista/tree/master/lickmongo
+
+STEPS TO INSTALL
+
+1. Build SLATEC 
+cd into the slatec subdirectory and type "make" to run the default setting
+of the Makefile
+
+2. Build LAPACK
+cd into the lapack/lapack-3.2.1 and type "make all" to run the full
+installation
+
+(NOTE: you might try a simpler approach first-- it is possible that if you are
+running the same architecture as I compiled these packages on, then
+you only need to type "ranlib *", where * is the library object module 
+* = "lapack_LINUX.a" in the lapack/lapack-3.2.1 directory 
+* = "libslatec.a" in the slatec directory
+to do this cd into the directory where the object module lives and
+type the ranlib command
+
+3. Build MINFIT
+Once the two object libraries are built and Lick Mongo is installed,
+cd into the minfit/minfit4 subdirectory and edit the Makefile to
+modify the path to the Lick Mongo object library; the variable to edit
+is "MGOLIBS"; save the updated Makefile. Now, in the minfit/minfit4
+subdirectory type "Build".  The Build command runs a small script
+using the Makefile.  Step 1, it constructs the object library
+"libminfit.a"; step 2 it compiles MINFIT.
+
+4. Test MINFIT
+In the subdirectory minfit/minfit4/Examples are two example systems to
+be tested.  I suggest starting with EX1.  For a more extensive test,
+also run EX2.  For full testing (recommended), run the systems in the
+minfit/minfit4/Test-runs subdirectory; there are README files that
+explain these test systems
+
+Good luck!
+
+Chris

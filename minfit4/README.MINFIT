@@ -1,0 +1,557 @@
+c    This file contains some operational insights on running MINFIT.
+c
+c    I suggest you view the EPS file 'FLOWCHART.eps' to see the 
+c    algorithmic flow of the program; this plot was created by 
+c    Jessica Evans as part of her PhD dissertation.
+c
+c
+c------------------------------------------------------------------------------
+c     RUNNING
+c
+c     MINFIT requires two optional input commands line arguments
+c     run command minfit $1 $2
+c
+c     $1 = the file containing the initial VP parameters 
+c     $2 = the file containing the list of ions to be fit
+c
+c     $1 is assigned to the string variable "profitfile"
+c     $2 is assigned to the string variable "ionlist"
+c
+c     DEFAULTS: it is possible to leave the command line arguments
+c     blank in which case the defaults are assigned:
+c     default $1 -> profitfile = 'ivpfit.ivppars'
+c     dfaults $2 - > ionlist   = 'ions.table'
+c
+c     MINFIT provides a minfit.runlog file and generates several 
+c     output files:
+c     > minfit4.Tdat  - cloud temperature data and uncertainties
+c     > minfit4.adat  - history of line dropping (DEBUG MODE)
+c     > minfit4.vdat  - velocity VP results
+c     > minfit4.zdat  - redshift VP results
+c
+c     DEBUG MODE OPTION:
+c
+c     If you type DEBUG as the first command line argument ($1), MINFIT
+c     will do a lot of auxillary printing to the screen (and I think
+c     to the runlog file); in this case then three command line arguments
+c     are required, such that $1->$2 and $2->$3 
+c
+c     THE PARAMETER FILE
+c
+c     MINFIT assumes a parameter file called "minfit4.par" to either be 
+c     in the current working directory or in the default parameter dir
+c     (if you are on a remove machine from matrix.nmsu.edu, you must
+c     have it in the current working directory)  see below for a description 
+c     of this file
+c
+c     OTHER REQURED AND OPTIONAL FILES
+c     see below
+c
+c
+c------------------------------------------------------------------------------
+c     NOMINCLATURE:
+c
+c     most DO loops use the following running indices to denote the
+c     following, through there are occasional loops when a standard i,
+c     j, or k may be invoked
+c     
+c     regioni  = region number (absorption subsystem) being fit
+c     ioni     = index number for a given transition, i.e. MgII2796
+c     speciesi = the species index number, i.e., for MgII or FeII, etc.
+c     linei    = the VP component index number 
+c     flagion  = the species number used for statistics (see more below)
+c
+c
+c------------------------------------------------------------------------------
+c     OVERVIEW:
+c
+c     MINFIT takes an inputted initial multi-component,
+c     multi-transition, multi-ion species Voigt profile (VP) model
+c     consisting of component velocities, column densities, and Doppler
+c     b parameters.  MINFIT uses the fitting engine of the Netlib.org
+c     Slatec library called dnls1e to then obtain the chi2 minimized
+c     adjustment to the input parameters to obtain the least squares fit
+c     (LSF).  The Slatec library is a separately compiled object library
+c     which is linked during compilation.  Details on the dnls1e fitting
+c     machine are given in the subdirecotry containing the Slatec
+c     routines.
+c
+c     The chi2 statistic is applied to all transitions of all species.
+c     Once an LSF is obtained a series of statistical checks (including
+c     F-tests with confidence level adoption criteria) are performed to
+c     then minimize the number of components (MINFIT can toss
+c     components, and it can recommend addtional components, but it
+c     cannot add components).  The post-LSF checks are performed on the
+c     flagion only; this is because in a given absorption region, there
+c     is likely one ion that constrains the LSF the best; i.e. where the
+c     absorption lines are not saturated or are so weak that the LSF
+c     parameters are not well constrained.  The user can choose the
+c     flagion for each subsystem region to allow for relative strengths
+c     at different velocity regions.
+c
+c     The LSF fitting is performed in routine fitregion and the post-LSF
+c     checking is performed in routine testlines.  Details can be found
+c     in the comments of those routines.
+c
+c     After all the checks are completed, the final LSF parameters are
+c     otained.  At this point, MINFIT obtains the column density limits
+c     for components in ion species where the fitting parameters were
+c     not constrained.  Then the final model is returned in two files
+c     (and to STDOUT).  The output files are minfit.zdat and
+c     minfit.vdat.  The .zdat file has headers and provides the
+c     components in reshift order.  The .vdat file is the same format as
+c     the .zdat file but has no header and the components are presented
+c     in rest--frame velocity order.
+c
+c
+c------------------------------------------------------------------------------
+c     ARCHITECTURE:
+c
+c     Complex absorption lines in a single system can be separated by
+c     regions consistent with continuum.  Each of these regions can
+c     constitutes a phsyically separate subsystem.  MINFIT fits the
+c     spectra subsystem by subsystem, one region at a time.  The
+c     statistics of each region are independent of one another.  It is
+c     possible that not all transition have detectable absorption in all
+c     regions.  Thus, MINFIT scans all the data for the current region
+c     and determines which transitions to include in the fitting and
+c     which to omit.  Sometimes, this can result in the omission of an
+c     entire ion species.  Most of the complicated book keeping is based
+c     upon these considerations.
+c
+c     Some important global (COMMON) parameters, indices, etc...
+c
+c     lines = current number of VP components being fit (changes as
+c     lines are dropped)
+c     
+c     ions = number of transitions included in the fitting list (see [2]
+c     below); throughout the notation ioni is the index referencing a
+c     given transition
+c
+c     total = the total number of species included in the fitting list
+c     (see [2] below).
+c
+c     species = the number of species being fit, i.e., MgII, FeII, etc.;
+c     there are cases where certain transitions may not have a detected
+c     absorption line in a given wavelength region; this parameter keeps
+c     track when we "drop" certain species from the fit in a given
+c     region
+c
+c     spec_idx(ioni) = a book keeping quantity, containing the species
+c     number of the transition indexed by ioni; for example, the
+c     MgII2796 and MgII2803 lines may have ioni index numbers 1 and 2,
+c     and both have spec_idx=1 (MgII). So spec_idx(1) = 1 and
+c     spec_idx(2)=1.
+c
+c     features(ioni) = a boolean indicating if any absorption lines are
+c     detected in a given wavelength region.  If features(ioni)=.false.,
+c     the the transition is dropped from the fit.
+c
+c     fitindex(1->species) = a book keeping quantity with index ranging
+c     from 1 to species.  This values of fitindex are the species
+c     numbers in sequence for which at least one transition has a
+c     detected feature to be fit; fitindex allows for the skipping of
+c     entire species if all of its transitions are dropped i.e., the
+c     features(ioni)=.false. for all transitions asscociated with a
+c     given species.
+c
+c     flagion(regioni) = the species index number for the species being
+c     used for the fitting statistics.  All the transitions for the
+c     species are included in the statistics.
+c
+c
+c------------------------------------------------------------------------------
+c     PREPARATION: required and optional input files
+c
+c     REQUIRED
+c     1. parameter input file (must be 'minfit4.par')
+c     2. atomic data file (file name given in 'minfit4.par' file)
+c     3. VP fit parameters file (filename = $1, default='ivpfit.ivppars') 
+c     4. list of ions to fit (filename = $2, default='ions.table')
+c     5. fitting regions file (must be 'ew_regions.dat')
+c     6. systemic redshift file (must be 'zabs.dat')
+c
+c     OPTIONAL
+c     7. saturated velocity regions (must be called 'sat_regions.dat')
+c     8. dominant ion per subregion (must be called 'fitregions') 
+c
+c     DETAILS
+c
+c     [1] the 'minfit4.par' file, modified for your run, including the
+c     instrumental resolution, convergence criteria, etc.  That file is
+c     explained fully in the header comments of module getparms.f  (also 
+c     see full comments on this below)
+c
+c     [2] the atomic data file: this is the standard 'atoms.dat' file from 
+c     Morgon (1991) being pass around the community; you should have this
+c     somewhere (you will need to point to it in the minfit4.par file) 
+c
+c     [3] the initial model of VP parameters (default='ivpfit.ivppars'); 
+c     this is usually output from the program IVPFIT, which is an updated 
+c     veriosn of PROFIT.  [SEE THE WARNING BELOW]. The file format is
+c
+c         3      0.553362      0.000000
+c     MgII2796        8
+c         1     12.968691      3.876100      5.362682
+c         2     12.802829    -49.370600      5.309055
+c         3     12.602048    -79.227400      2.993804
+c         4     12.479833     27.293600      3.587483
+c         5     12.540940     50.683400      3.310331
+c         6     12.497292     -8.899000      3.697296
+c         7     12.130649     63.458500      4.342313
+c         8     12.069541     86.813900      5.870368
+c     MgII2803        8
+c         1     12.968691      3.876100      5.362682
+c         2     12.802829    -49.370600      5.309055
+c         3     12.602048    -79.227400      2.993804
+c         4     12.479833     27.293600      3.587483
+c         5     12.540940     50.683400      3.310331
+c         6     12.497292     -8.899000      3.697296
+c         7     12.130649     63.458500      4.342313
+c         8     12.069541     86.813900      5.870368
+c     FeII2600        8
+c         1     12.718378      3.876100      5.362682
+c         2     12.550857    -49.370600      5.309055
+c         3     12.348068    -79.227400      2.993804
+c         4     12.224631     27.293600      3.587483
+c         5     12.286349     50.683400      3.310331
+c         6     12.242265     -8.899000      3.697296
+c         7     11.871955     63.458500      4.342313
+c         8     11.810236     86.813900      5.870368
+c
+c
+c     - where line 1 is 1=number of ions, 2=systemic redshift, 3=dummy
+c     - then for each ion the first line is 1= ion name (matching the 
+c       file name the spectrum is in and the file name in the 
+c       'ions.table' file), 2=the number of VP components
+c     - then the VP components follow where 1=component number, 
+c       2=log10 column density, 3=velocity, 4=b parameter (km/s)
+c
+c     **** IMPORTANT NOTE *********************************************** 
+c     * PROFIT generated this file with the same format, but the column * 
+c     * densities were given as N13 = N/1.0E13.  This version of MINFIT *
+c     * expects log10 column densities in this file.  If using PROFIT   *
+c     * I suggest a script to make the conversion before running MINFIT *
+c     *******************************************************************
+c
+c     [4] the $2=ionlist file (default='"ions.table') containing
+c     the list of ions (file names of the input ions must match the 
+c     names of the tranisitons in the atomic data file). example:   
+c
+c     MgII2796  1  1.00  0.00  5.0
+c     MgII2803  1  1.00  0.00  3.0
+c     FeII2600  2  1.01 -0.38  3.0
+c     FeII2587  2  1.01 -0.38  3.0
+c     MgI2853   3  0.74  1.65  3.0
+c
+c     where col 1 = ion name (file name containing spectrum)
+c           col 2 = tie identifier, reserve 1 for the dominant ion
+c           col 3 = A parameter for the column density scaling law
+c           col 4 = B parameter for the column density scaling law
+c           col 5 = Nsigma significance level for ion detection
+c
+c     Column density scaling only occurs if saturation regions are turned 
+c     on (see [7]). The species tie identifier "ties" transitions so 
+c     that their VP components are fit with the same column densities and 
+c     b parameters.  The species number must be consecutive, you cannot 
+c     skip 3 and have a 4, for example.  The number 1 is the default 
+c     "flag ion".  This is the species for which the detection regions 
+c     have been defined (see [5]). 
+c
+c     [5] A file containing the spectral regions to be fit.  This file
+c     must be named "ew_regions.dat". The file contains a beginning and
+c     ending wavelength for the flag ion.  Multiple regions are allowed,
+c     and MINFIT performs its minimization one each region, one at a
+c     time, and completely separate of one another (the spectra are fit
+c     region by region).  Each line is a region, and the format for each
+c     line is,
+c     
+c       region #, dummy, lambda1, lambda2, lambar, lambda0
+c
+c     for example,
+c
+c            1 1.25 5341.0622 5345.2308 5343.1465 2796.3520
+c            2 1.25 5345.7625 5347.1773 5346.4699 2796.3520
+c            3 1.25 5347.4244 5347.9888 5347.7066 2796.3520
+c
+c     the dummy is a historical (sorry), and the lambar is also a dummy
+c     (not used).  lambda1 is the starting wavelength of the
+c     detection/fitting region, lambda 2 is the ending wavelength of the
+c     detection/fitting region.  The last column is the reference
+c     wavelength- it is critical that this is the laboratory wavelength
+c     of the transition for which the detection regions were determined.
+c     When this file is read, the wavelength regions are converted to
+c     redshift regions, using z1 = lambda1/lambda0 - 1, etc.  
+c
+c     [6] a file called 'zabs.dat' that contains the precise systemic
+c     redshift of the absorption line system.  It has one line and one
+c     entry, the redshift.  This redshift is used to "de-redshift" the
+c     spectra (not physically, but virtually) during the fitting in
+c     order to ensure that the column densities and b parameters are
+c     rest--frame values.
+c
+c     [7] [optional] a file (default='sat_regions.dat') containing the 
+c     velocity window over which the flag ion (tie=1) is saturated.  If
+c     this file exists during the MINFIT run, then it is read in and 
+c     column density scaling is invoked over the velocity region identified 
+c     as being saturated; the file format is
+c
+c                2 1 -117.0 70.0
+c
+c     where the first 2 columns are the tie identies of the numbers ions
+c     to have their columns tied together.  the second 2 columns are the 
+c     velocity range over which the saturation scaling is applied, in this
+c     case from -117.0 to 70.0 km/s.  the 2nd column entered has its 
+c     column densities tied to the 1st column entered.  For example, this 
+c     exampls has MgII columns scaled to FeII columns, since MgII will
+c     be the most saturated ion.  This scaling avoids unphysical column
+c     density ratios between the two ions, i.e., like N(FeII)>>N(MgII).
+c     the scaling is given by log10(col2) = A*log10(col1) + B, which is a
+c     power law fit.  The constants A and B are given in the 'ions.table' 
+c     file (see [4]).  The good of this is getting more realistic column 
+c     density ratios of saturated ions and better constrains on the number 
+c     of clouds in saturated regions; the bad side of this is that A and B
+c     must be based upon emprical results and are only an average- and
+c     they are fixed for all clouds, which may not be realistic
+c
+c
+c     [8] [optional] a file (default='fitregions') containing the species 
+c     index number that serves as the "flag ion" (the species that is 
+c     considered to be the dominant ion for converging the model in the 
+c     given region; the point is that the flag ion could be very saturate in
+c     region 1, but dominant in region 2, so one would chose a different ion
+c     for region 1 so as to better constrain the model.  The file has two 
+c     entires per line:
+c                    
+c                    1 2
+c                    2 1
+c                    3 1
+c
+c     where the first column is the region number and the second column
+c     is the species index (tie) number of the ion serving as the flag ion 
+c     for that region.  If this file is not present, then the flag ion is
+c     "1" for all regions.  If the file exists, it must be named
+c     "fitregions" and all regions must be listed inthe file.
+c
+c     NOTE: honestly, with the new version of MINFIT in the way it handles
+c     the fitting statistics now, and given that saturated regions can be
+c     invoked, this file is probably moot
+c
+c------------------------------------------------------------------------------
+c     THE INITIAL VOIGT PROFILE MODELS
+c
+c     This is truly the biggest part of the preparation to run MINFIT.
+c     It is recommended that the use install and run AUTOVP (original
+c     code by Romeel Dave; modified by ChrisChurchill to include
+c     convolution with the instrumental spread function).  A second
+c     program is recommended called IVPFIT (author Chris Churchill),
+c     which takes the output of AUTOVP and creates full system wide
+c     model.  It also allows for interactive graphical editing of the
+c     model for finer tuning.
+c
+c     AUTOVP is run on a single transition of one ion species ans
+c     produces an initial VP model for that ion species.  It cannot
+c     handle blends with other transitions for other ion species.
+c
+c     IVPFIT reads in this model and the data, automatically applies the
+c     model to all transition for all ion species (includes automatic
+c     column density scaling) and the graphically displays the model for
+c     interactive editing.  The output of IVPFIT can then be read
+c     directly into MINFIT as the intial VP model.
+c
+c     **** IMPORTANT NOTE *********************************************** 
+c     * PROFIT generated this file with the same format, but the column * 
+c     * densities were given as N13 = N/1.0E13.  This version of MINFIT *
+c     * expects log10 column densities in this file.  If using PROFIT   *
+c     * I suggest a script to make the conversion before running MINFIT *
+c     *******************************************************************
+c
+c     Details of AUTOVP and IVPFIT can be found in the preamble of those
+c     routines.  For those braving an intial model made by hand, the
+c     format of the file containing the model can be seen in the
+c     subdirectory "example" in the file called "ivpfit.last"
+c
+
+
+c------------------------------------------------------------------------------
+c     contents of the minfit.par file (here is and example file...)
+
+C* input params for minfit * see header of file getparms.f for explanation *
+"/home/matrix/cwc/Data/Atomic/atoms.dat"        Atomic data file
+5       nprint - frequency at which iterations are communicated
+1.e-7   tol - the tolerance of the fit
+1.0     fudge - scale sigma vector by sqrt of fudge
+4.25    N_sigma - feature detection threshold using LTW87
+1.0     bmin - minimum b par allowed for  N limit computations
+0.8     fberr - fractional error in b par for N limit computations
+1       pltflag - integer flag: any=plotting OFF  1=plotting ON
+2       adjflag - integer flag: adjust/toss -> 0=OFF/OFF  1=ON/OFF 2=ON/ON
+1.5     badness - minimum fractional error in "suspect" line
+0.97    confidence - confidence level at which to reject a "suspect" line
+1       errflag - integer flag: any=compute errors OFF  1=compute errors ON
+1       conflag - integer flag: any=convolution OFF  1=convolution ON
+45000.  R_fac - the spectrograph resolution R=lambda/(Delta lambda)
+0.868   slit - the spectrograph slit width in arcseconds
+3.      conwindo - # of inst. profile sigma to include in convolution
+3.      resfac - (odd integer) sample rate factor for convolution arrays
+
+
+c       IONFILE is the file containing the atomic data.  This file can
+c       be very long containing many transitions.  MINFIT searches it
+c       for the matching atomic data for ion/transitions listed in the
+c       "fitlist" file.  The ion/transition names in the this file must
+c       match the names in the first column of the IONFILE.  The second
+c       column is the vacuum rest--frame transition wavelength, the
+c       third column is the oscillator strength, and the fourth column
+c       is the damping constant.
+c
+c       NPRINT is an integer input variable.  As the program progresses
+c       the LSF, the current results will be putput to STDOUT and the
+c       plotting window is updated every NPRINT iterations.  If NPRINT
+c       is 0, then communication and plotting updates are suppressed
+c       until the LSF converges, though the final LSF is plotted if
+c       PLTFLAG (see below) is set to 1.  Depending upon the absorbing
+c       systems complexity (number of lines and ionic transitions),
+c       NPRINT should be set to 3 to 5.  One should not set NPRINT to 1.
+c
+c       TOL is a double precision real input variable.  This should be
+c       set to roughly the square root of the machine precision.  A good
+c       default is 1.E-7.  If TOL is too small, the 4th convergence
+c       criterion my be invoked to terminate the LSF iterations.  More
+c       later.
+c
+c       FUDGE is a double precision real input variable.  The resulting
+c       reduced Chi Square may be a factor of a few smaller or greater
+c       than unity.  If one desires a unity Chi Square, one can scale
+c       the sigma vector by the square root of FUDGE.  This fudged sigma
+c       vector may represent a better approximation to the noise in the
+c       data (users discretion).
+c
+c       NSIGMA is a double precision real input variable.  In multiple
+c       ion fitting, low abundance or small oscillator strength ions may
+c       have "significant features" in some fitting regions but not in
+c       others.  Since the code fits by regions, it is possible to
+c       include an ionic transition in the overall scheme, but not
+c       include it in the fit of a region where it does not provide
+c       useful constraints on the fitting model.  If NSIGMA is set to 0,
+c       all inputed ions are fit.  If NSIGMA is non-zero, then the code
+c       checks the current fitting region of each ion/transition for
+c       features (equivalent width detections) at the NSIGMA level.  If
+c       an ion/transition has no features in the current region, then it
+c       is excluded from the LSF in that region.  A message is sent to
+c       STDOUT.  The column densities and Doppler parameters of the
+c       lines are zeroed.
+c
+c       BMIN is a double precision real input providing the minimum
+c       allowed b parameter at which a line is considered to be bogus.
+c       It is applied when computing the column density limits.  Lines
+c       with b<=BMIN will be replaced with their limits.  The default is
+c       BMIN=1 (km/s).  In practice, as the signal to noise gets very
+c       high (SNR~100) it can be necessary to increase BMIN.  An
+c       iterative decision may be appropriate.
+c
+c       FBERR is a double precision real input providing the fraction
+c       error in the b parameter at which a line is considered to be
+c       bogus.  It is applied when computing the column density limits.
+c       Lines with db/b>FBERR will be replaced with their limits.  The
+c       default is FBERR=10, which is very generous.  In practice, as
+c       the signal to noise gets very high (SNR~100) it can be necessary
+c       to reduce FBERR.  An iterative decision may be appropriate.
+c
+c       PLTFLAG is an integer input variable.  If PLTFLAG is 1, then the
+c       data and the LSF are plotted and updated every NPRINT
+c       itertations using Lick Mongo.  The program then requests for
+c       keystrokes or mouse clicks *in the plotting window* in order to
+c       proceed fitting each region.  After fitting the last region, the
+c       entire fit is plotted.  If PLTFLAG is set to any value other
+c       than 1, plotting is suppressed.
+c
+c       ADJFLAG is an integer input variable.  If ADJFLAG is 1 or 2
+c       "suspect" lines are sought and their significance to the fit is
+c       assessed.  For each, line, the fractional error is computed,
+c
+c       FRAC ERROR = sqrt ( (dN/N)**2 + (db/b)**2 + (dz/z)**2 ) ,
+c
+c       where N is the column density, b is the Doppler parameter, and z
+c       is the redshift of the line.  If FRAC ERROR is greater than the
+c       input parameter BADNESS, then the line is investigated for its
+c       significance to the fit.  The line is removed and a new fit is
+c       constructed, which has a greater number of degrees of freedom.
+c       An F-Test is used to compare if the change in the Chi square
+c       statistic is significant by computing a probability, which is
+c       taken to be the CONFIDENCE level at which the line is deemed to
+c       make an *insignificant* contibution to the fit.  See the
+c       CONFIDENCE input parameter.  If ADJFLAG > 0, then input
+c       parameter ERRFLAG is automatically set to 1 by MINFIT.  ---
+c       Inconditional tossing during the intial model fit can be done if
+c       ADJFLAG=2, but will not be done is ADJFLAG=1.
+c
+c       BADNESS is a double precision real input variable.  BADNESS
+c       should be a number greater than 1, but can be set to any value
+c       (not that the results will be useful, however).  Usually, the
+c       predominant uncertainty is in the b parameter.  A BADNESS
+c       between 1.5 and 2.0 is recommended.
+c
+c       CONFIDENCE is a double precision real input variable.  It should
+c       be set to a number between 0 and 1.  CONFIDENCE is compared to
+c       the probability resulting from the F-Test that a suspect line is
+c       *insignificant*.  The rejection criterion is
+c
+c       probability line is insignificant < CONFIDENCE ; line is
+c       retained
+c
+c       probability line is insignificant > CONFIDENCE ; line is
+c       rejected
+c
+c       A recommended value range for CONFIDENCE is 0.97-0.99
+c
+c
+c       ERRFLAG is an integer input variable.  If ERRFLAG is 1, the
+c       uncertainties in the fitted parameters are computed.  Neville's
+c       tableau is used to perform the finite differencing.  Though this
+c       approach is robust and very rarely results in a singular
+c       curvature matrix, it is quite slow.  In fact, a single pass
+c       through the error computation can increase the run time of
+c       MINFIT by as much as an order of magnitude.  If ADJFLAG is set
+c       to 1, then ERRFLAG is automatically set to 1.
+c
+c       CONFLAG is an integer input variable.  If CONFLAG is 1, then the
+c       WRKFLX is convolved with an instrumental profile (assumed
+c       Gaussian).  In this case, one must include instrumental
+c       information (see below).  Setting CONFLAG is set to anything but
+c       1, one can completely ignore the following instrumental
+c       information in the parameter file.
+c
+c       These may be ignored if CONFLAG is set to any value other than
+c       unity.
+c
+c       R_FAC is a double precision real input variable.  R_FAC is the
+c       instrument resolution in (lambda/delta lambda) units.  For
+c       example, HIRES has several R factors, one of which is R=45000.,
+c       which gives a velocity resolution of 6.6 km/s/arcsecond.  The
+c       code computes the instrument resolution as a Gaussian sigma,
+c       where the FWHM is given by c/R_FAC times SLIT (see below), where
+c       c is the speed of light.  If R_FAC=0 and CONFLAG=1, then the the
+c       instrument resolution as a Gaussian sigma is taken directly from
+c       the value of SLIT.
+c
+c       SLIT is a double precision real input variable.  SLIT is the
+c       projected width of the spectrograph slit in arcseconds.  If
+c       CONFLAG=1 and R_FAC=0, then SLIT is the instrumental resolution
+c       as a Gaussian sigma in units of kilometers per second.
+c
+c       CONWINDO is a double precision real input variable.  CONWINDO is
+c       the width in units of Gaussian sigma of the instrumental profile
+c       (response) over which the convolution is performed (to be
+c       thought of as the half length of the response function in sigma
+c       units).  Setting CWIDTH to 3.0 is usually sufficient.
+c
+c       RESFAC is a double precision real input variable.  RESFAC is the
+c       sampling rate for the convolution.  Since instruments usually
+c       have a near critical sampling rate, convolution may result in
+c       artifacts such as flux non-conservation.  RESFAC is used to
+c       increase the "sampling rate" by adding pixels in the convolution
+c       integrals only.  The values of the WRKFLX (a smooth noiseless
+c       model function) in these added pixels are obtained by
+c       interpolation of a cubic spline.  RESFAC should be an odd whole
+c       number.  Setting RESFAC to 3.0 is usually sufficient.

@@ -1,0 +1,34 @@
+C** see inparams.f for definitions ********************************
+1.0	fsigma -- number of noise vectors subtracted from smooth to get minflux
+0.05    fbfrac -- frac of pix below the min fit for success
+7.d15	NHImaxns -- NHI maximum for non-saturated line
+7.d18	NHImaxsat -- NHI maximum for saturated line (MUST HAVE NO WINGS)
+10.	bparmax -- b param maximum
+3.	bminsat -- b param minimum for saturated line
+0.99	freduce -- factor by which b and N are reduced during fitting
+1.d0	dfdvsat -- deriv dfdv limit which identifies trough of saturated line
+10	npixcusp -- number of pixels for cusp region (for saturated line fits)
+5	ipivint -- interval between ipivots (for saturated line fits)
+3	nwidth -- half-width of detection window (also # of overlap pix)
+0.5	sigmasm -- width of Gaussian smoothing in pixels (smooth)
+4	nsmfact -- number of smoothing factors over which to smooth (smooth)
+0.25	bfact -- factor which sets max vel diff to combine lines (combine)
+6	nint -- # of pixels in 1 interval of piecewise polyn fit (polyfit)
+3	minint -- minimum nint; also overlap between intervals
+10	nsplitmin -- # of lines above which to split region
+3	nlinemin -- min # of lines in split region
+0.01	fvarymin -- sets min factor by which parm is varied (oneparmin,nparmin)
+4.0	N_sigma -- detection threshold
+100   	maxiter -- maximum number of iterations for Marquardt minimization
+1.d8  	alamdamax -- maximum alamda in Marquardt minimization
+2.0   	chisqbad -- chisq above which it's a "bad fit", i.e. try 1-par min
+1.0   	chisqgood -- chisq below which it's a "good fit"
+0.01 	chisqtol -- if chisq reduces by less than this factor, it's converged
+0.1   	faccept -- for tossing lines, if chisq goes up by less than this accept
+0.5     hstep -- the initial resolution for iteratively finding deltah
+0.01    tolderiv -- tolerance for finite differencing of dparm   
+45000.  R_fac -- the spectrograph R factor R=lambda/(Delta lambda)
+3.0     cwidth -- the number of inst. profile sigma to include in convolution 
+3.      resfac -- sample rate factor for convolution arrays 
+1       conflag -- integer flag 0=convolution OFF 1=convolution ON
+1       pltflag -- integer flag 0=plotting OFF 1 plotting ON

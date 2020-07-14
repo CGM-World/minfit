@@ -1,0 +1,21 @@
+C* input params for minfit * see header of file getparms.f for explanation *
+"/home/matrix/cwc/Data/Atomic/atoms.dat"        Atomic data file
+5       nprint - frequency at which iterations are communicated
+1.e-7   tol - the tolerance of the fit
+1.0     fudge - scale sigma vector by sqrt of fudge
+4.25    N_sigma - feature detection threshold using LTW87
+1.0     bmin - minimum b par allowed for adjustment testing
+20.0    bmax - maximum b par allowed for adjustment testing
+16.0    Nmax - maximum log10 column density for adjustment testing
+10.     fberr - fractional error in b par for N limit computations
+1       iturb - integer flag: 1=pure turbulance, 0=pure thermal
+1       pltflag - integer flag: any=plotting OFF  1=plotting ON
+2       adjflag - integer flag: adjust/toss -> 0=OFF/OFF  1=ON/OFF 2=ON/ON
+1.5     badness - minimum fractional error in "suspect" line
+0.97    confidence - confidence level at which to reject a "suspect" line
+1       errflag - integer flag: any=compute errors OFF  1=compute errors ON
+1       conflag - integer flag: any=convolution OFF  1=convolution ON
+45000.  R_fac - the spectrograph resolution R=lambda/(Delta lambda)
+0.861   slit - the spectrograph slit width in arcseconds
+3.      conwindo - # of inst. profile sigma to include in convolution 
+3.      resfac - (odd integer) sample rate factor for convolution arrays 

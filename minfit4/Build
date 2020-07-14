@@ -1,0 +1,4 @@
+/bin/rm -f libminfit.a
+/bin/rm -f minfit
+make lib
+make minfit
